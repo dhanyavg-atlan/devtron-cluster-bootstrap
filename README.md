@@ -33,10 +33,14 @@ Devtron step 3  ->  sh /work/scripts/install-chart-group.sh
 | `GCP_PROJECT` | 1 | project holding the cluster |
 | `DEVTRON_HOST` | all | e.g. `devtron-public.atlan.engineering` |
 | `DEVTRON_API_TOKEN` | all | **from a Devtron Secret** — the only long-lived secret |
-| `TARGET_NAMESPACE` | 2,3 | default `control` |
-| `CHART_GROUP_ID` | 3 | default `2` (`onboarding-group`) |
+| `CHART_GROUP_ID` | 2,3 | default `2` (`onboarding-group`) |
 | `TEAM_ID` | 3 | default `7` (`infra`) |
 | `ESO_VALUES_YAML` | 3 | optional values override for external-secrets (e.g. WIF SA annotation) |
+
+> **Namespaces are per-chart, not a single input.** Each chart installs into its own
+> namespace via `scripts/lib/chart-namespaces.sh` (`flux2` → `flux-system`,
+> `external-secrets` → `external-secrets`). Step 2 creates one environment
+> (`<cluster>-<namespace>`) per unique namespace; step 3 installs each chart into its own.
 
 ## Container images (per step)
 
