@@ -18,6 +18,9 @@ API="https://${DEVTRON_HOST}/orchestrator"
 # Isolate kubeconfig — never touch a shared/current-context kubeconfig.
 KUBECONFIG="$(mktemp)"; export KUBECONFIG
 
+# Ensure kubectl + the GKE auth plugin (image is google/cloud-sdk:slim = gcloud only).
+command -v kubectl >/dev/null 2>&1 || gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+
 echo ">> reaching ${CLUSTER_NAME} via Connect Gateway"
 gcloud container fleet memberships get-credentials "$CLUSTER_NAME" \
   --location "$CLUSTER_LOCATION" --project "$GCP_PROJECT"
