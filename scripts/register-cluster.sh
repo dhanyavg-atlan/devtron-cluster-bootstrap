@@ -25,9 +25,13 @@ if ! command -v kubectl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
   apt-get install -y -qq kubectl google-cloud-cli-gke-gcloud-auth-plugin jq >/dev/null 2>&1
 fi
 
-echo ">> reaching ${CLUSTER_NAME} via Connect Gateway"
-gcloud container fleet memberships get-credentials "$CLUSTER_NAME" \
-  --location "$CLUSTER_LOCATION" --project "$GCP_PROJECT"
+# Reach the cluster over its PRIVATE endpoint, intra-VPC (Devtron shares the VPC).
+# No Connect Gateway — matches the production model (CG is ADR-033 breakglass only).
+# Auth is the runner GSA (container.admin) → GKE maps it to cluster-admin RBAC, so
+# no fleet membership, no gateway IAM, and no explicit ClusterRoleBinding are needed.
+echo ">> reaching ${CLUSTER_NAME} via private endpoint (intra-VPC, no Connect Gateway)"
+gcloud container clusters get-credentials "$CLUSTER_NAME" \
+  --location "$CLUSTER_LOCATION" --project "$GCP_PROJECT" --internal-ip
 
 echo ">> minting cd-user ServiceAccount (idempotent)"
 kubectl apply -f - <<EOF
