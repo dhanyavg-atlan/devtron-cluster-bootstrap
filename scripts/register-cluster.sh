@@ -1,15 +1,18 @@
 #!/bin/sh
 # Step 1 — register the (already-existing, private) cluster into Devtron.
 #
-# Reaches the private cluster over Connect Gateway using the job's WIF identity,
-# mints a cd-user ServiceAccount + token, reads the private endpoint + CA, then
-# POSTs to Devtron. The cluster is NOT created here (that is the OpenTofu flow).
+# Reaches the cluster over its PRIVATE endpoint, intra-VPC (Devtron shares the VPC) —
+# NO Connect Gateway (that's ADR-033 human break-glass only). Mints a cd-user
+# ServiceAccount + token, reads the private endpoint + CA, then POSTs to Devtron.
+# The cluster is NOT created here (that's the OpenTofu / bootstrap flow).
 #
-# Needs: gcloud + kubectl + jq + curl  (use a google/cloud-sdk image for this step).
+# Auth: the runner GSA's container.admin → GKE maps it to in-cluster cluster-admin
+# RBAC, so no fleet membership, gateway IAM, or explicit ClusterRoleBinding is needed.
+# Needs: gcloud + kubectl + jq + curl  (run on a google/cloud-sdk image).
 set -eu
 
-: "${CLUSTER_NAME:?set CLUSTER_NAME (fleet membership / cluster name)}"
-: "${CLUSTER_LOCATION:?set CLUSTER_LOCATION, e.g. us-central1}"
+: "${CLUSTER_NAME:?set CLUSTER_NAME (target cluster; also used as the Devtron cluster_name)}"
+: "${CLUSTER_LOCATION:?set CLUSTER_LOCATION — cluster location: zone if zonal (e.g. us-central1-a), region if regional}"
 : "${GCP_PROJECT:?set GCP_PROJECT (project holding the cluster)}"
 : "${DEVTRON_HOST:?set DEVTRON_HOST}"
 : "${DEVTRON_API_TOKEN:?set DEVTRON_API_TOKEN (from a Devtron Secret)}"
@@ -25,10 +28,7 @@ if ! command -v kubectl >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
   apt-get install -y -qq kubectl google-cloud-cli-gke-gcloud-auth-plugin jq >/dev/null 2>&1
 fi
 
-# Reach the cluster over its PRIVATE endpoint, intra-VPC (Devtron shares the VPC).
-# No Connect Gateway — matches the production model (CG is ADR-033 breakglass only).
-# Auth is the runner GSA (container.admin) → GKE maps it to cluster-admin RBAC, so
-# no fleet membership, no gateway IAM, and no explicit ClusterRoleBinding are needed.
+# --internal-ip = connect to the private master IP over the VPC (see header for why).
 echo ">> reaching ${CLUSTER_NAME} via private endpoint (intra-VPC, no Connect Gateway)"
 gcloud container clusters get-credentials "$CLUSTER_NAME" \
   --location "$CLUSTER_LOCATION" --project "$GCP_PROJECT" --internal-ip
