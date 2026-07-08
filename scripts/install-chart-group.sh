@@ -33,10 +33,14 @@ while read -r entry; do
   [ -n "$eid" ] && [ "$eid" != "null" ] || { echo "env $envname missing (run create-environment first)"; exit 1; }
 
   vals=""; [ "$cname" = "external-secrets" ] && vals="${ESO_VALUES_YAML:-}"   # e.g. WIF SA annotation
+  # deploymentAppType:"helm" = direct Helm install (NOT GitOps). Required here:
+  # these bootstrap charts install Flux itself, so they can't be Flux/GitOps-managed
+  # (chicken-and-egg). Without it, Devtron defaults to GitOps and demands gitRepoURL.
   body="$(jq -n --argjson av "$avid" --argjson eid "$eid" --argjson cid "$CID" --argjson tid "$TEAM_ID" \
     --arg ns "$ns" --arg app "${CLUSTER_NAME}-${cname}" --arg v "$vals" \
     '{appStoreVersion:$av, environmentId:$eid, clusterId:$cid, teamId:$tid, namespace:$ns,
-      appName:$app, valuesOverrideYaml:$v, referenceValueId:$av, referenceValueKind:"DEFAULT"}')"
+      appName:$app, deploymentAppType:"helm", valuesOverrideYaml:$v,
+      referenceValueId:$av, referenceValueKind:"DEFAULT"}')"
   resp="$(curl -sS -w '\n%{http_code}' -X POST "$API/app-store/deployment/application/install" \
     -H "$H" -H "Content-Type: application/json" -d "$body")"
   code="$(echo "$resp" | tail -n1)"
