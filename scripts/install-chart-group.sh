@@ -2,6 +2,7 @@
 # Step 3 — install each chart in the group into ITS OWN namespace/environment.
 # A chart group is not bound to one environment; each chart is a separate install.
 # flux2 -> flux-system, external-secrets -> external-secrets (see lib/chart-namespaces.sh).
+# Env is looked up by name <cluster>-<alias> (created in step 2).
 # Needs: curl + jq  (alpine + apk add --no-cache curl jq).
 set -eu
 
@@ -26,7 +27,7 @@ while read -r entry; do
   avid="$(echo "$entry" | jq -r '.appStoreApplicationVersionId')"
   cname="$(echo "$entry" | jq -r '.chartMetaData.chartName')"
   ns="$(chart_namespace "$cname")"
-  envname="${CLUSTER_NAME}-${ns}"
+  envname="${CLUSTER_NAME}-$(chart_env_alias "$cname")"
 
   eid="$(curl -sS -H "$H" "$API/env" | jq -r --arg e "$envname" '.result[] | select(.environment_name==$e) | .id')"
   [ -n "$eid" ] && [ "$eid" != "null" ] || { echo "env $envname missing (run create-environment first)"; exit 1; }
@@ -38,7 +39,13 @@ while read -r entry; do
       appName:$app, valuesOverrideYaml:$v, referenceValueId:$av, referenceValueKind:"DEFAULT"}')"
   resp="$(curl -sS -w '\n%{http_code}' -X POST "$API/app-store/deployment/application/install" \
     -H "$H" -H "Content-Type: application/json" -d "$body")"
-  echo "install $cname -> ns=$ns env=$envname HTTP $(echo "$resp" | tail -n1)"
+  code="$(echo "$resp" | tail -n1)"
+  case "$code" in
+    2*) echo "install $cname -> ns=$ns env=$envname OK" ;;
+    *)  echo "$resp" | grep -qi "already exist" \
+          && echo "install $cname -> already installed, continuing" \
+          || { echo "$resp" | sed '$d'; echo "install $cname FAILED (HTTP $code)"; exit 1; } ;;
+  esac
 done < "$tmp"
 rm -f "$tmp"
 echo "chart-group install dispatched (per-chart namespaces)"
